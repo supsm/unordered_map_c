@@ -50,6 +50,17 @@ void unordered_map_cleanup(struct unordered_map* map)
 	map->exponent = 0;
 }
 
+void unordered_map_clear(struct unordered_map* map)
+{
+	size_t i;
+	for (i = 0; i < map->bucket_count; i++)
+	{
+		free(map->keys[i].ptr);
+		map->keys[i] = { NULL, 0, 0 };
+	}
+	map->size = 0;
+}
+
 /* find position of key in array, or available empty slot
  * @param insert_mode  0 if "insert mode" (return deleted slots), 1 otherwise (skip deleted slots) */
 static size_t unordered_map_find_pos_keys_arr(const struct umap_string* keys, size_t keys_array_2_exp, struct umap_string key, char insert_mode)

@@ -45,6 +45,10 @@ void unordered_map_init(struct unordered_map* map);
  * object must be re-initialized before further usage */
 void unordered_map_cleanup(struct unordered_map* map);
 
+/* deletes all elements without deleting buffers
+ * can immediately be re-used */
+void unordered_map_clear(struct unordered_map* map);
+
 /* sets number of slots to new_size, rounded to nearest exponent of 2
  * and rehashes all elements, invalidating all iterators */
 void unordered_map_rehash(struct unordered_map* map, size_t new_size);
