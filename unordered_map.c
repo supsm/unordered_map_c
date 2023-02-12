@@ -1,6 +1,6 @@
 #include "unordered_map.h"
 
-unsigned int FNV_1a(const char* buf, size_t buf_size)
+static unsigned int FNV_1a(const char* buf, size_t buf_size)
 {
 	/* FNV offset basis */
 	unsigned int hash = 0x811c9dc5;

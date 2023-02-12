@@ -6,7 +6,7 @@
 
 /* initialize map with size 2^umap_init_exp */
 const size_t umap_init_exp = 8;
-/*/ grow map by 2^umap_growth_factor_exp when necessary */
+/* grow map by 2^umap_growth_factor_exp when necessary */
 const size_t umap_growth_factor_exp = 2;
 const float umap_max_load_factor = 0.85;
 typedef size_t umap_value_t;
@@ -36,8 +36,6 @@ struct unordered_map_iterator
 	/* index = map->bucket_count for end iterator */
 	size_t index;
 };
-
-unsigned int FNV_1a(const char* buf, size_t buf_size);
 
 
 /* initialize a new unordered map */
