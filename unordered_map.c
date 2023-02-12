@@ -2,13 +2,14 @@
 
 unsigned int FNV_1a(const char* buf, size_t buf_size)
 {
-	// FNV offset basis
+	/* FNV offset basis */
 	unsigned int hash = 0x811c9dc5;
 
-	for (size_t i = 0; i < buf_size; i++)
+	size_t i;
+	for (i = 0; i < buf_size; i++)
 	{
 		hash ^= buf[i];
-		// multiply by FNV prime, overflow on unsigned is well-defined
+		/* multiply by FNV prime, overflow on unsigned is well-defined */
 		hash *= 0x01000193;
 	}
 
@@ -26,7 +27,7 @@ static char umap_string_compare(struct umap_string left, struct umap_string righ
 
 void unordered_map_init(struct unordered_map* map)
 {
-	// initialize with fixed size
+	/* initialize with fixed size */
 	const size_t init_size = 1 << umap_init_exp;
 	map->keys = (struct umap_string*)(calloc(init_size, sizeof(struct umap_string)));
 	map->values = (umap_value_t*)(calloc(init_size, sizeof(umap_value_t)));
@@ -37,7 +38,8 @@ void unordered_map_init(struct unordered_map* map)
 
 void unordered_map_cleanup(struct unordered_map* map)
 {
-	for (size_t i = 0; i < map->bucket_count; i++)
+	size_t i;
+	for (i = 0; i < map->bucket_count; i++)
 	{
 		free(map->keys[i].ptr);
 	}
@@ -48,36 +50,32 @@ void unordered_map_cleanup(struct unordered_map* map)
 	map->exponent = 0;
 }
 
-// find position of key in array, or available empty slot
-// @param insert_mode  0 if "insert mode" (return deleted slots), 1 otherwise (skip deleted slots)
-static size_t unordered_map_find_pos_keys_arr(const struct umap_string* keys, size_t keys_array_2_exp, const char* key, size_t key_length, char insert_mode)
+/* find position of key in array, or available empty slot
+ * @param insert_mode  0 if "insert mode" (return deleted slots), 1 otherwise (skip deleted slots) */
+static size_t unordered_map_find_pos_keys_arr(const struct umap_string* keys, size_t keys_array_2_exp, struct umap_string key, char insert_mode)
 {
 	const size_t mask = (1 << keys_array_2_exp) - 1;
 
-	unsigned int hash = FNV_1a(key, key_length);
-	// casting away constness is mostly fine because `str` is only used for comparisons
-	const struct umap_string str = { (char*)(key), key_length, hash };
-
+	size_t hash = key.hash;
 	hash &= mask;
-	if (keys[hash].ptr == NULL || umap_string_compare(keys[hash], str))
+	if (keys[hash].ptr == NULL || umap_string_compare(keys[hash], key))
 	{
 		return hash;
 	}
 	else
 	{
-		// quadratic probing, c1 = c2 = 1/2
-		// R = c1 + c2, Q = 2 * c2
-		// TODO: fine-tune R
+		/* quadratic probing, c1 = c2 = 1/2
+		 * R = c1 + c2, Q = 2 * c2 */
 		const size_t R = 3, Q = 1;
 		size_t i = R;
 		size_t element_location = hash;
 
-		// while slot is occupied with a different key (collision), look for new slot
-		// if keys[element_location.ptr] != NULL, stay in the loop (if keys do not match)
-		// otherwise, if insert_mode is false AND keys[element_location].size == 1, stay because deleted slots are skipped
-		// if insert_mode is true, either way we exit the loop because deleted and empty slots can both be filled
+		/* while slot is occupied with a different key (collision), look for new slot
+		 * if keys[element_location.ptr] != NULL, stay in the loop (if keys do not match)
+		 * otherwise, if insert_mode is false AND keys[element_location].size == 1, stay because deleted slots are skipped
+		 * if insert_mode is true, either way we exit the loop because deleted and empty slots can both be filled */
 		while ((keys[element_location].ptr != NULL || (!insert_mode && keys[element_location].size == 1)) &&
-			!umap_string_compare(keys[element_location], str))
+			!umap_string_compare(keys[element_location], key))
 		{
 			element_location += i;
 			element_location &= mask;
@@ -87,23 +85,29 @@ static size_t unordered_map_find_pos_keys_arr(const struct umap_string* keys, si
 	}
 }
 
-// find position of key in map, or available empty slot
+/* find position of key in map, or available empty slot */
 static size_t unordered_map_find_pos(const struct unordered_map* map, const char* key, size_t key_length, char insert_mode)
 {
-	return unordered_map_find_pos_keys_arr(map->keys, map->exponent, key, key_length, insert_mode);
+	unsigned int hash = FNV_1a(key, key_length);
+	struct umap_string str;
+	/* casting away constness is fine, `str` only used for comparisons */
+	str.ptr = (char*)(key);
+	str.size = key_length;
+	str.hash = hash;
+	return unordered_map_find_pos_keys_arr(map->keys, map->exponent, str, insert_mode);
 }
 
-// from bit twiddling hacks
-// returns exponent (msb set bit), rounded up
+/* from bit twiddling hacks
+ * returns exponent (msb set bit), rounded up */
 static size_t round_up_2_exp(size_t in)
 {
+	size_t r = 1;
 	if (in == 0)
 	{
 		return 0;
 	}
-	// subtract 1 from `in` and add 1 to result to round up
+	/* subtract 1 from `in` and add 1 to result to round up */
 	in--;
-	size_t r = 1;
 	while (in >>= 1)
 	{
 		r++;
@@ -117,12 +121,13 @@ static void unordered_map_rehash_exp(struct unordered_map* map, size_t new_exp)
 	struct umap_string* new_keys = (struct umap_string*)(calloc(new_size, sizeof(struct umap_string)));
 	size_t* new_values = (size_t*)(calloc(new_size, sizeof(size_t)));
 
-	for (size_t i = 0; i < map->bucket_count; i++)
+	size_t i;
+	for (i = 0; i < map->bucket_count; i++)
 	{
-		// deleted and empty slots are both ignored
+		/* deleted and empty slots are both ignored */
 		if (map->keys[i].ptr != NULL)
 		{
-			size_t pos = unordered_map_find_pos_keys_arr(new_keys, new_exp, map->keys[i].ptr, map->keys[i].size, 1);
+			size_t pos = unordered_map_find_pos_keys_arr(new_keys, new_exp, map->keys[i], 1);
 			new_keys[pos] = map->keys[i];
 			new_values[pos] = map->values[i];
 		}
@@ -143,16 +148,18 @@ void unordered_map_rehash(struct unordered_map* map, size_t new_size)
 
 struct unordered_map_iterator unordered_map_insert(struct unordered_map* map, const char* key, size_t key_length, umap_value_t value)
 {
+	size_t pos;
+	struct unordered_map_iterator it;
 	if ((float)(map->size) / map->bucket_count >= umap_max_load_factor)
 	{
 		unordered_map_rehash_exp(map, map->exponent + umap_growth_factor_exp);
 	}
 
-	size_t pos = unordered_map_find_pos(map, key, key_length, 1);
+	pos = unordered_map_find_pos(map, key, key_length, 1);
 
 	if (map->keys[pos].ptr == NULL)
 	{
-		// duplicate string, null-terminated
+		/* duplicate string, null-terminated */
 		struct umap_string str;
 		str.ptr = (char*)(malloc(key_length + 1));
 		memcpy(str.ptr, key, key_length);
@@ -165,7 +172,8 @@ struct unordered_map_iterator unordered_map_insert(struct unordered_map* map, co
 	map->values[pos] = value;
 	map->size++;
 
-	struct unordered_map_iterator it = { map, pos };
+	it.map = map;
+	it.index = pos;
 	return it;
 }
 
@@ -173,13 +181,13 @@ size_t unordered_map_erase(struct unordered_map* map, const char* key, size_t ke
 {
 	size_t pos = unordered_map_find_pos(map, key, key_length, 0);
 
-	// exit if element not found
+	/* exit if element not found */
 	if (map->keys[pos].ptr == NULL)
 	{
 		return 0;
 	}
 
-	// mark as deleted
+	/* mark as deleted */
 	free(map->keys[pos].ptr);
 	map->keys[pos].ptr = NULL;
 	map->keys[pos].size = 1;
@@ -190,16 +198,17 @@ size_t unordered_map_erase(struct unordered_map* map, const char* key, size_t ke
 
 struct unordered_map_iterator unordered_map_erase_it(struct unordered_map* map, struct unordered_map_iterator it)
 {
+	size_t pos;
 	if (map->keys[it.index].ptr == NULL)
 	{
 		return unordered_map_end(map);
 	}
 
-	// save old index, incremen
-	size_t pos = it.index;
+	/* save old index, increment */
+	pos = it.index;
 	unordered_map_iterator_increment(&it);
 
-	// mark as deleted
+	/* mark as deleted */
 	free(map->keys[pos].ptr);
 	map->keys[pos].ptr = NULL;
 	map->keys[pos].size = 1;
@@ -212,24 +221,29 @@ struct unordered_map_iterator unordered_map_erase_it(struct unordered_map* map, 
 struct unordered_map_iterator unordered_map_find(const struct unordered_map* map, const char* key, size_t key_length)
 {
 	size_t pos = unordered_map_find_pos(map, key, key_length, 0);
-	// set iterator to element if found and end iterator otherwise
+	struct unordered_map_iterator it;
+	/* set iterator to element if found and end iterator otherwise */
 	if (map->keys[pos].ptr == NULL)
 	{
 		return unordered_map_end(map);
 	}
-	struct unordered_map_iterator it = { map, pos };
+	it.map = map;
+	it.index = pos;
 	return it;
 }
 
 struct unordered_map_iterator unordered_map_begin(const struct unordered_map* map)
 {
-	// return first valid iterator
-	for (size_t i = 0; i < map->bucket_count; i++)
+	/* return first valid iterator */
+	size_t i;
+	for (i = 0; i < map->bucket_count; i++)
 	{
-		// deleted, empty both ignored
+		/* deleted, empty both ignored */
 		if (map->keys[i].ptr != NULL)
 		{
-			struct unordered_map_iterator it = { map, i };
+			struct unordered_map_iterator it;
+			it.map = map;
+			it.index = i;
 			return it;
 		}
 	}
@@ -238,7 +252,9 @@ struct unordered_map_iterator unordered_map_begin(const struct unordered_map* ma
 
 struct unordered_map_iterator unordered_map_end(const struct unordered_map* map)
 {
-	struct unordered_map_iterator it = { map, map->bucket_count };
+	struct unordered_map_iterator it;
+	it.map = map;
+	it.index = map->bucket_count;
 	return it;
 }
 
@@ -255,7 +271,8 @@ struct umap_string unordered_map_iterator_key(struct unordered_map_iterator it)
 
 void unordered_map_iterator_increment(struct unordered_map_iterator* it)
 {
-	for (size_t i = it->index + 1; i < it->map->bucket_count; i++)
+	size_t i;
+	for (i = it->index + 1; i < it->map->bucket_count; i++)
 	{
 		if (it->map->keys[i].ptr != NULL)
 		{
@@ -263,13 +280,14 @@ void unordered_map_iterator_increment(struct unordered_map_iterator* it)
 			return;
 		}
 	}
-	// end iterator
+	/* end iterator */
 	it->index = it->map->bucket_count;
 }
 
 void unordered_map_iterator_decrement(struct unordered_map_iterator* it)
 {
-	for (size_t i = it->index + 1; i >= 0; i--)
+	size_t i;
+	for (i = it->index + 1; i >= 0; i--)
 	{
 		if (it->map->keys[i].ptr != NULL)
 		{
@@ -277,7 +295,7 @@ void unordered_map_iterator_decrement(struct unordered_map_iterator* it)
 			return;
 		}
 	}
-	// end iterator
+	/* end iterator */
 	it->index = it->map->bucket_count;
 }
 
